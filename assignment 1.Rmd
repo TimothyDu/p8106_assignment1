@@ -1,0 +1,158 @@
+---
+title: "assignment 1"
+author: "Ruicong(Timothy) Du"
+date: "2025-02-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Question a
+In this analysis, I will fit a **LASSO regression model** to predict house sale prices using various characteristics.
+
+## Load Required Libraries
+```{r}
+library(glmnet)
+library(caret)
+library(tidymodels)
+library(ggplot2)
+library(dplyr)
+library(readr)
+```
+
+## Load and Preprocess Data
+```{r}
+# Load data
+train_data = read_csv("./housing_training.csv", na = c("NA","","."))
+test_data = read_csv("./housing_test.csv",na = c("NA","","."))
+
+# Extract response variable
+y_train = train_data$Sale_Price
+X_train = train_data %>% select(-Sale_Price)
+X_test = test_data
+
+# Encode categorical variables
+X_train = model.matrix(~., data = X_train)[,-1]
+X_test = model.matrix(~., data = X_test)[,-1]
+
+# Ensure X_test has the same structure as X_train
+X_test <- X_test[, colnames(X_train), drop = FALSE]
+
+# Standardize predictors
+X_train = scale(X_train)
+X_test = scale(X_test)
+```
+
+## Fit LASSO Model with Cross-Validation
+```{r}
+set.seed(2)
+lasso_cv = cv.glmnet(X_train, y_train, alpha = 1, nfolds = 10)
+
+# Extract optimal lambda values
+lambda_min = lasso_cv$lambda.min
+lambda_1se = lasso_cv$lambda.1se
+
+# Fit model with lambda_1se
+lasso_1se = glmnet(X_train, y_train, alpha = 1, lambda = lambda_1se)
+num_predictors_1se = sum(coef(lasso_1se) != 0)
+```
+
+## Model Results
+```{r}
+# Extract coefficients for lambda_min
+lasso_coef <- predict(lasso_cv, s = lambda_min, type = "coefficients")
+
+# Display nonzero coefficients
+lasso_coef_df <- as.data.frame(as.matrix(lasso_coef))
+lasso_coef_df <- lasso_coef_df[lasso_coef_df != 0, , drop = FALSE]  # Keep only nonzero coefficients
+
+# Print the coefficients
+print(lasso_coef_df)
+```
+```{r}
+cat("Optimal lambda (lambda_min):", lambda_min, "\n")
+cat("Lambda using 1SE rule (lambda_1se):", lambda_1se, "\n")
+cat("Number of predictors in model (1SE rule):", num_predictors_1se, "\n")
+```
+
+## Test Set Prediction and MSE
+```{r}
+y_pred <- predict(lasso_cv, newx = as.matrix(X_test), s = lambda_min)
+test_mse <- mean((y_pred - test_data$Sale_Price)^2)
+
+cat("Test Mean Squared Error:", test_mse, "\n")
+
+```
+
+## Coefficient Plot
+```{r}
+plot(lasso_cv)
+```
+
+## Reporting
+
+1. Report the Selected Tuning Parameter
+The optimal lambda (lambda_min):38.51706
+The lambda using the 1SE rule (lambda_1se):756.1055
+
+2. Number of Predictors in the Model (1SE Rule)
+The number of predictors retained when using the 1SE rule is 31 predictors
+
+3.Test Error (Mean Squared Error):480,000,218
+
+# Question b
+
+## Fit Elastic Net Model with Cross-Validation
+```{r}
+set.seed(2)
+elastic_net_cv <- cv.glmnet(X_train, y_train, alpha = 0.5, nfolds = 10)
+
+# Extract optimal lambda values
+lambda_min_en <- elastic_net_cv$lambda.min
+lambda_1se_en <- elastic_net_cv$lambda.1se
+
+# Fit model with lambda_1se
+elastic_net_1se <- glmnet(X_train, y_train, alpha = 0.5, lambda = lambda_1se_en)
+num_predictors_1se_en <- sum(coef(elastic_net_1se) != 0)
+```
+
+```{r}
+# Extract coefficients for lambda_min
+elastic_net_coef <- predict(elastic_net_cv, s = lambda_min_en, type = "coefficients")
+
+# Display nonzero coefficients
+elastic_net_coef_df <- as.data.frame(as.matrix(elastic_net_coef))
+elastic_net_coef_df <- elastic_net_coef_df[elastic_net_coef_df != 0, , drop = FALSE]  
+
+# Print the coefficients
+print(elastic_net_coef_df)
+
+# Report results
+cat("Optimal lambda (lambda_min) for Elastic Net:", lambda_min_en, "\n")
+cat("Lambda using 1SE rule (lambda_1se) for Elastic Net:", lambda_1se_en, "\n")
+cat("Number of predictors in model (1SE rule) for Elastic Net:", num_predictors_1se_en, "\n")
+```
+
+```{r}
+y_pred_en <- predict(elastic_net_cv, newx = as.matrix(X_test), s = lambda_min_en)
+test_mse_en <- mean((y_pred_en - test_data$Sale_Price)^2)
+
+cat("Test Mean Squared Error for Elastic Net:", test_mse_en, "\n")
+```
+
+## Reporting
+
+1. Selected Tuning Parameter:
+
+Optimal lambda (lambda_min): r lambda_min_en
+Lambda using 1SE rule (lambda_1se): r lambda_1se_en
+Number of Predictors in the Model (1SE Rule):
+
+The number of predictors retained when using the 1SE rule: r num_predictors_1se_en
+Test Error (Mean Squared Error):
+
+Test MSE: r test_mse_en
+
+
