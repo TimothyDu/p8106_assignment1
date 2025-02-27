@@ -20,6 +20,7 @@ library(tidymodels)
 library(ggplot2)
 library(dplyr)
 library(readr)
+library(pls)
 ```
 
 ## Load and Preprocess Data
@@ -100,7 +101,7 @@ The lambda using the 1SE rule (lambda_1se):756.1055
 2. Number of Predictors in the Model (1SE Rule)
 The number of predictors retained when using the 1SE rule is 31 predictors
 
-3.Test Error (Mean Squared Error):480,000,218
+3.Test Error (Mean Squared Error):480000218
 
 # Question b
 
@@ -146,13 +147,89 @@ cat("Test Mean Squared Error for Elastic Net:", test_mse_en, "\n")
 
 1. Selected Tuning Parameter:
 
-Optimal lambda (lambda_min): r lambda_min_en
-Lambda using 1SE rule (lambda_1se): r lambda_1se_en
-Number of Predictors in the Model (1SE Rule):
+Optimal lambda (lambda_min_en):92.79
+Lambda using the 1SE rule (lambda_1se_en):1377.87
 
-The number of predictors retained when using the 1SE rule: r num_predictors_1se_en
-Test Error (Mean Squared Error):
+2. Number of Predictors in the Model (1SE Rule):
 
-Test MSE: r test_mse_en
+The number of predictors retained when using the 1SE rule is 32 predictors
 
+3. Test MSE: 479114830
+
+Yes it is possible to apply the 1SE rule to select the tuning parame-ters for elastic net.
+
+
+# Question c
+```{r}
+set.seed(2)
+pls_model <- plsr(Sale_Price ~ ., data = train_data, scale = TRUE, validation = "CV")
+
+# Summary of the model
+summary(pls_model)
+
+# Determine optimal number of components using cross-validation
+cv_mse <- RMSEP(pls_model)
+optimal_ncomp <- which.min(cv_mse$val[1,,]) - 1  # Extract optimal number of components
+cat("Optimal number of components:", optimal_ncomp, "\n")
+
+# Test Set Prediction
+y_pred_pls <- predict(pls_model, newdata = test_data, ncomp = optimal_ncomp)
+test_mse_pls <- mean((y_pred_pls - test_data$Sale_Price)^2)
+
+cat("Test Mean Squared Error for PLS:", test_mse_pls, "\n")
+
+# Cross-validated MSE plot
+validationplot(pls_model, val.type = "MSEP", legendpos = "topright")
+```
+
+## Reporting 
+
+1. The PLS model selected 8 components based on cross-validation.
+
+2. The Test Mean Squared Error for PLS is 440217938, meaning PLS might be a better fit.
+
+# Question d
+The Partial Least Squares (PLS) model is the best choice for predicting house prices as it achieves the lowest test error (MSE = 440217938) and RMSE (= 6,630), outperforming LASSO and Elastic Net. Additionally, PLS selects only 8 components, reducing dimensionality while maintaining strong predictive power. In contrast, LASSO and Elastic Net retain 31-32 predictors, which may lead to overfitting without better generalization, therefore it is the most effective model for predicting house prices.
+
+# Question e
+
+```{r}
+# Define cross-validation control
+ctrl <- trainControl(method = "cv", number = 10)
+
+# Train LASSO model using caret
+set.seed(2)
+lasso_caret <- train(
+  Sale_Price ~ .,
+  data = train_data,
+  method = "glmnet",
+  tuneGrid = expand.grid(alpha = 1, lambda = exp(seq(-5, 5, length = 100))),
+  trControl = ctrl
+)
+
+# Extract best tuning parameter
+caret_lambda_min <- lasso_caret$bestTune$lambda
+
+# Extract nonzero coefficients
+caret_coefficients <- coef(lasso_caret$finalModel, caret_lambda_min)
+
+# Print results
+cat("Caret-selected lambda:", caret_lambda_min, "\n")
+```
+
+Next, we will compare with glmnet from Question A
+```{r}
+cat("Glmnet-selected lambda_min:", lambda_min, "\n")
+cat("Glmnet-selected lambda_1se:", lambda_1se, "\n")
+```
+
+The lambda values selected by caret and glmnet differ, with caret choosing λ = 48.86 and glmnet selecting λ = 38.52 as the optimal (lambda_min). The glmnet provides a lambda_1se value of 756.11, which is absent in caret's output.
+
+Potential reasons for these differences.
+
+* Lambda Grid Differences: glmnet auto-generates lambda values, while caret requires a manually defined grid
+
+* Cross-Validation Approach:  glmnet controls folds internally, whereas caret uses trainControl(), which may introduce slight variations
+
+* Performance Metric Differences: caret selects lambda based on RMSE, while glmnet minimizes cross-validation error
 
